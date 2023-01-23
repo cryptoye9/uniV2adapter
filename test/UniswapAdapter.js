@@ -21,7 +21,7 @@ const RPL  = '0xb4efd85c19999d84251304bda99e90b92300bd93'; // Rocket Pool
 const USDT = '0xdac17f958d2ee523a2206206994597c13d831ec7'; 
 const MKR = '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2'; // Maker DAO
 
-const RPL_holder_address = '0xb4efd85c19999d84251304bda99e90b92300bd93';
+const RPL_holder_address = '0xf558212da3053db61bcbd4ccdb294e2b5fe4bdff';
 const USDT_holder_address = '0x82e1d4ddd636857ebcf6a0e74b9b0929c158d7fb';
 const MKR_holder_address = '0xa9dda2045d140eb7ccd30c4ef6b9901ccb279793';
 
@@ -57,21 +57,39 @@ describe('UniswapV2Adapter', function () {
 
     it('# setRoute', async function () {
         const routeToSet = [RPL, MKR, USDT]
-        await adapter.connect(deployer).setRoute(RPL, MKR, routeToSet);
+        await adapter.connect(deployer).setRoute(RPL, USDT, routeToSet);
 
-        const initialRoute = await adapter.routes(RPL, MKR, [0]);
-      //  const reverseRoute = await adapter.routes(MAKER, RPL);
-
-
-     //   let reverseCounter = routeToSet.length;
 
         for (let i = 0; i < routeToSet.length; ++i) {
-            expect(initialRoute[i]).to.equal(routeToSet[i])
-            //expect(reverseRoute[i]).to.equal(routeToSet[--reverseCounter])
+            const expectedAddress = ethers.utils.getAddress(routeToSet[i])
+            expect(await adapter.routes(RPL, USDT, i)).to.equal(expectedAddress)
         }  
     })
 
-    it('# swap (without path)', async function () {  
+    it('# swap (with route)', async function () {  
+        await hre.network.provider.request({
+          method: 'hardhat_impersonateAccount',
+          params: [RPL_holder_address],
+        })
+  
+        RPL_holder = await ethers.getSigner(RPL_holder_address)
+  
+        await rocketPoolToken
+          .connect(RPL_holder)
+          .approve(adapter.address, ethers.constants.MaxUint256)
+  
+        await adapter
+          .connect(RPL_holder)
+          .swap(RPL, amountToSwap, USDT, 5)
+  
+  
+        await hre.network.provider.request({
+          method: 'hardhat_stopImpersonatingAccount',
+          params: [RPL_holder_address],
+        })
+    })
+
+    it('# swap (without route)', async function () {  
         await hre.network.provider.request({
           method: 'hardhat_impersonateAccount',
           params: [USDT_holder_address],

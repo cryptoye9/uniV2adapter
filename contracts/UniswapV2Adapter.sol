@@ -9,7 +9,6 @@ import "./interfaces/IUniswapV2Router02.sol";
 import "hardhat/console.sol";
 
 
-
 contract UniswapV2Adapter is Ownable {
     using SafeERC20 for IERC20;
 
@@ -17,6 +16,7 @@ contract UniswapV2Adapter is Ownable {
     address public immutable WETH;
 
     mapping (address => mapping (address => address[])) public routes; // tokenFrom => tokenTo => route
+    mapping (address => mapping (address => uint8)) private routeLengths; // tokenFrom => tokenTo => route length
 
     error ZeroAddress();
 
@@ -28,29 +28,30 @@ contract UniswapV2Adapter is Ownable {
     }
 
     function setRoute(address tokenFrom, address tokenTo, address[] memory route) external onlyOwner {
-        routes[tokenFrom][tokenTo] = route;
-
-        //console.log(routes[tokenFrom][tokenTo]);
-        //console.log(routes[tokenTo][tokenFrom]);
-
-        //uint8 reverseIndex = uint8(route.length);
-        //routes[tokenTo][tokenFrom][0] = address(0);
+        for (uint8 i = 0; i < route.length; ++i) 
+            routes[tokenFrom][tokenTo].push(route[i]);
+        for (uint8 i = 0; i < route.length; ++i) 
+            routes[tokenFrom][tokenTo].push(route[route.length - i - 1]);
+        routeLengths[tokenFrom][tokenTo] = uint8(route.length);
     }
 
     function swap(address tokenFrom, uint256 amountToSwap, address tokenTo, uint256 slippage) external {
-        address[] memory route = routes[tokenFrom][tokenTo];
+        address[] memory route;
+    
+        uint256 balanceBeforeSwap = IERC20(tokenTo).balanceOf(address(this));
+
+        if (routeLengths[tokenFrom][tokenTo] == 0) {
+            //route[0] = tokenFrom;
+            //route[1] = WETH;
+            //route[2] = tokenTo;
+        } else {
+            route = getRoute(tokenFrom, tokenTo);
+        }
 
         SafeERC20.safeTransferFrom(
             IERC20(tokenFrom), msg.sender, address(this), amountToSwap
         );
 
-        if (route.length == 0) {
-            route[0] = tokenFrom;
-            route[1] = WETH; 
-            route[2] = tokenTo;
-        }
-
-        uint256 balanceBeforeSwap = IERC20(tokenTo).balanceOf(address(this));
         _swap(tokenFrom, amountToSwap, tokenTo, route, slippage);
         uint256 amountToSend = IERC20(tokenTo).balanceOf(address(this)) - balanceBeforeSwap;
         IERC20(tokenTo).safeTransfer(msg.sender, amountToSend);
@@ -68,6 +69,7 @@ contract UniswapV2Adapter is Ownable {
         uint256 deadline = block.timestamp + 100;
         address[] memory path;
 
+        console.log(route.length);
         for (uint8 i = 0; i < route.length - 1; ++i) {
             path[0] = route[i];
             path[1] = route[i + 1];
@@ -84,5 +86,11 @@ contract UniswapV2Adapter is Ownable {
 
             deadline = block.timestamp + 100;
         }
+    }
+
+    function getRoute(address from, address to) public returns(address[] memory) {
+        for (uint8 i = 0; i < routeLengths[from][to]; ++i) 
+            route[i] = routes[from][to][i];
+        return route;
     }
 }
