@@ -56,17 +56,21 @@ describe('UniswapV2Adapter', function () {
     const amountToSwap = utils.parseEther("1.0")
 
     it('# setRoute', async function () {
-        const routeToSet = [RPL, MKR, USDT]
-        await adapter.connect(deployer).setRoute(RPL, USDT, routeToSet);
+        const routeToSet = [RPL, USDT, MKR]
+        await adapter.connect(deployer).setRoute(RPL, MKR, routeToSet);
 
+        expect(await adapter.routeLengths(RPL, MKR)).to.equal(routeToSet.length)
 
         for (let i = 0; i < routeToSet.length; ++i) {
             const expectedAddress = ethers.utils.getAddress(routeToSet[i])
-            expect(await adapter.routes(RPL, USDT, i)).to.equal(expectedAddress)
+            expect(await adapter.routes(RPL, MKR, i)).to.equal(expectedAddress)
         }  
     })
 
     it('# swap (with route)', async function () {  
+        const routeToSet = [RPL, USDT, MKR]
+        await adapter.connect(deployer).setRoute(RPL, MKR, routeToSet);
+
         await hre.network.provider.request({
           method: 'hardhat_impersonateAccount',
           params: [RPL_holder_address],
@@ -80,7 +84,7 @@ describe('UniswapV2Adapter', function () {
   
         await adapter
           .connect(RPL_holder)
-          .swap(RPL, amountToSwap, USDT, 5)
+          .swap(RPL, amountToSwap, MKR, 5)
   
   
         await hre.network.provider.request({

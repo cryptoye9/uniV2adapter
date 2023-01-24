@@ -16,7 +16,7 @@ contract UniswapV2Adapter is Ownable {
     address public immutable WETH;
 
     mapping (address => mapping (address => address[])) public routes; // tokenFrom => tokenTo => route
-    mapping (address => mapping (address => uint8)) private routeLengths; // tokenFrom => tokenTo => route length
+    mapping (address => mapping (address => uint256)) public routeLengths; // tokenFrom => tokenTo => route length
 
     error ZeroAddress();
 
@@ -32,27 +32,25 @@ contract UniswapV2Adapter is Ownable {
             routes[tokenFrom][tokenTo].push(route[i]);
         for (uint8 i = 0; i < route.length; ++i) 
             routes[tokenFrom][tokenTo].push(route[route.length - i - 1]);
-        routeLengths[tokenFrom][tokenTo] = uint8(route.length);
+        routeLengths[tokenFrom][tokenTo] = route.length;
     }
 
-    function swap(address tokenFrom, uint256 amountToSwap, address tokenTo, uint256 slippage) external {
-        address[] memory route;
-    
+    function swap(address tokenFrom, uint256 amountToSwap, address tokenTo, uint256 slippage) external {        
+        uint256 routeLength;
         uint256 balanceBeforeSwap = IERC20(tokenTo).balanceOf(address(this));
 
         if (routeLengths[tokenFrom][tokenTo] == 0) {
-            //route[0] = tokenFrom;
-            //route[1] = WETH;
-            //route[2] = tokenTo;
+            routeLength = 3;
+
         } else {
-            route = getRoute(tokenFrom, tokenTo);
+            routeLength = routeLengths[tokenFrom][tokenTo];
         }
 
         SafeERC20.safeTransferFrom(
             IERC20(tokenFrom), msg.sender, address(this), amountToSwap
         );
 
-        _swap(tokenFrom, amountToSwap, tokenTo, route, slippage);
+        _swap(tokenFrom, amountToSwap, tokenTo, routeLength, slippage);
         uint256 amountToSend = IERC20(tokenTo).balanceOf(address(this)) - balanceBeforeSwap;
         IERC20(tokenTo).safeTransfer(msg.sender, amountToSend);
     }
@@ -61,19 +59,23 @@ contract UniswapV2Adapter is Ownable {
         address tokenFrom, 
         uint256 amountToSwap, 
         address tokenTo,
-        address[] memory route,
+        uint256 routeLength, 
         uint256 slippage
     ) private {
         uint256 amountIn = amountToSwap;
         address to = address(this);
         uint256 deadline = block.timestamp + 100;
-        address[] memory path;
+        address[] memory path = new address[](2);
 
-        console.log(route.length);
-        for (uint8 i = 0; i < route.length - 1; ++i) {
+        address[] memory route = getRoute(tokenFrom, tokenTo);
+        for (uint8 i = 0; i < routeLength; i++) console.log(route[i]);
+
+        for (uint8 i = 0; i < routeLength - 1; ++i) {
             path[0] = route[i];
             path[1] = route[i + 1];
-            uint256[] memory amountsOutMin = Router.getAmountsOut(amountIn, path);
+            console.log(path[0], path[1]);
+            uint256[] memory amountsOutMin = new uint[](2);
+            amountsOutMin = Router.getAmountsOut(amountIn, path);
             uint256 amountOutMin = amountsOutMin[1] * (100 ether - slippage) / 100 ether;
 
             Router.swapExactTokensForTokens(
@@ -89,8 +91,18 @@ contract UniswapV2Adapter is Ownable {
     }
 
     function getRoute(address from, address to) public returns(address[] memory) {
-        for (uint8 i = 0; i < routeLengths[from][to]; ++i) 
-            route[i] = routes[from][to][i];
-        return route;
+        if (routeLengths[from][to] == 0) {
+            uint8 n = 3;
+            address[] memory route = new address[](n);
+            route[0] = from;
+            route[1] = WETH;
+            route[2] = to;
+        } else {
+            address[] memory route = new address[](routeLengths[from][to]);
+            for (uint8 i = 0; i < routeLengths[from][to]; ++i) {
+                route[i] = routes[from][to][i];
+            } 
+            return route;
+        } 
     }
 }
